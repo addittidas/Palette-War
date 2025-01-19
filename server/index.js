@@ -235,10 +235,10 @@ io.on('connection', (socket) => {
   });
 
   // Handle drawing events
-  socket.on('draw', ({ roomId, drawData }) => {
+  socket.on('draw', ({ roomId, x, y, color, size, type }) => {
     const room = rooms.get(roomId);
     if (room && room.currentDrawer && room.currentDrawer.id === socket.id) {
-      socket.to(roomId).emit('drawing', drawData);
+      socket.to(roomId).emit('draw', { x, y, color, size, type });
     }
   });
 
