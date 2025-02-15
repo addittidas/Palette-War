@@ -5,9 +5,11 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentColor, setCurrentColor] = useState('#000000');
   const [brushSize, setBrushSize] = useState(5);
+  const [isEraser, setIsEraser] = useState(false);
   const lastPos = useRef(null);
 
   const colors = [
+    '#000000', // black
     '#8B4513', // brown
     '#FFFFFF', // white
     '#808080', // gray
@@ -25,6 +27,11 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
 
   const brushSizes = [2, 5, 10, 15, 20];
 
+  // SVG cursors encoded in base64
+  const penCursor = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBkPSJNNy4xMjcgMjIuNTYybC03LjEyNyAxLjQzOCAxLjQzOC03LjEyOCAxNS43NjItMTUuNzYyIDUuNjg5IDUuNjl6Ii8+PC9zdmc+";
+  
+  const eraserCursor = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBkPSJNMTYuMjQgMy41NkwxNC40NCAxLjc2QzEzLjg0IDEuMTYgMTMuMDQgMC44NiAxMi4yNCAwLjg2QzExLjQ0IDAuODYgMTAuNjQgMS4xNiAxMC4wNCAxLjc2TDguMDQgMy43NkwxOC4yNCAxMy45NkwyMC4yNCAxMS45NkMyMS40NCAxMC43NiAyMS40NCA4Ljc2IDIwLjI0IDcuNTZMMTYuMjQgMy41NlpNMTcuMDQgMTQuODZMNy4wNCA0Ljg2TDMuNDQgOC40NkMyLjI0IDkuNjYgMi4yNCAxMS42NiAzLjQ0IDEyLjg2TDcuNDQgMTYuODZDOC4wNCAxNy40NiA4Ljg0IDE3Ljc2IDkuNjQgMTcuNzZDMTAuNDQgMTcuNzYgMTEuMjQgMTcuNDYgMTEuODQgMTYuODZMMTcuMDQgMTQuODZaIiBmaWxsPSIjMDAwMDAwIi8+PC9zdmc+";
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
@@ -35,16 +42,21 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
     context.lineCap = 'round';
     context.lineJoin = 'round';
 
-    // Set canvas cursor style
-    canvas.style.cursor = canDraw ? 'url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBkPSJNNy4xMjcgMjIuNTYybC03LjEyNyAxLjQzOCAxLjQzOC03LjEyOCAxNS43NjItMTUuNzYyIDUuNjg5IDUuNjl6Ii8+PC9zdmc+) 0 24, auto' : 'default';
+    // Set canvas cursor style based on tool
+    if (canDraw) {
+      const cursorUrl = isEraser ? eraserCursor : penCursor;
+      canvas.style.cursor = `url(${cursorUrl}) 0 24, auto`;
+    } else {
+      canvas.style.cursor = 'default';
+    }
 
     if (socket) {
-      socket.on('draw', ({ x, y, color, size, type }) => {
+      socket.on('draw', ({ x, y, color, size, type, isEraser }) => {
         if (type === 'start') {
           context.beginPath();
           context.moveTo(x, y);
         } else if (type === 'draw') {
-          context.strokeStyle = color;
+          context.strokeStyle = isEraser ? '#FFFFFF' : color;
           context.lineWidth = size;
           context.lineTo(x, y);
           context.stroke();
@@ -62,7 +74,7 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
         socket.off('clearCanvas');
       }
     };
-  }, [socket, currentColor, brushSize, canDraw]);
+  }, [socket, currentColor, brushSize, canDraw, isEraser]);
 
   const startDrawing = (e) => {
     if (!canDraw) return;
@@ -81,7 +93,8 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
       y,
       color: currentColor,
       size: brushSize,
-      type: 'start'
+      type: 'start',
+      isEraser
     });
   };
 
@@ -97,7 +110,7 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
     context.beginPath();
     context.moveTo(lastPos.current.x, lastPos.current.y);
     context.lineTo(x, y);
-    context.strokeStyle = currentColor;
+    context.strokeStyle = isEraser ? '#FFFFFF' : currentColor;
     context.lineWidth = brushSize;
     context.stroke();
 
@@ -109,12 +122,17 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
       y,
       color: currentColor,
       size: brushSize,
-      type: 'draw'
+      type: 'draw',
+      isEraser
     });
   };
 
   const stopDrawing = () => {
     setIsDrawing(false);
+  };
+
+  const toggleEraser = () => {
+    setIsEraser(!isEraser);
   };
 
   return (
@@ -134,11 +152,23 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
             {colors.map((color) => (
               <button
                 key={color}
-                className={`color-option ${color === currentColor ? 'selected' : ''}`}
+                className={`color-option ${color === currentColor && !isEraser ? 'selected' : ''}`}
                 style={{ backgroundColor: color }}
-                onClick={() => setCurrentColor(color)}
+                onClick={() => {
+                  setCurrentColor(color);
+                  setIsEraser(false);
+                }}
               />
             ))}
+            <button
+              className={`eraser-option ${isEraser ? 'selected' : ''}`}
+              onClick={toggleEraser}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24">
+                <path d="M16.24 3.56L14.44 1.76C13.84 1.16 13.04 0.86 12.24 0.86C11.44 0.86 10.64 1.16 10.04 1.76L8.04 3.76L18.24 13.96L20.24 11.96C21.44 10.76 21.44 8.76 20.24 7.56L16.24 3.56ZM17.04 14.86L7.04 4.86L3.44 8.46C2.24 9.66 2.24 11.66 3.44 12.86L7.44 16.86C8.04 17.46 8.84 17.76 9.64 17.76C10.44 17.76 11.24 17.46 11.84 16.86L17.04 14.86Z" 
+                fill={isEraser ? '#333' : '#666'}/>
+              </svg>
+            </button>
           </div>
           <div className="brush-sizes">
             {brushSizes.map((size) => (
@@ -152,7 +182,7 @@ function Canvas({ socket, isDrawing: canDraw, roomId }) {
                   style={{ 
                     width: size, 
                     height: size, 
-                    backgroundColor: currentColor 
+                    backgroundColor: isEraser ? '#FFFFFF' : currentColor 
                   }} 
                 />
               </button>
